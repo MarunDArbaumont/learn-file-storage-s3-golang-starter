@@ -8,6 +8,8 @@ import (
 	"mime"
 	"path/filepath"
 	"strings"
+	"crypto/rand"
+	"encoding/base64"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -71,7 +73,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "not allowed to upload this file type", err)
 		return
 	}
-	thumbnailFile := fmt.Sprintf("%s.%s", videoIDString, fileExtension)
+
+	key := make([]byte, 32)
+	rand.Read(key)
+	
+
+	thumbnailFile := fmt.Sprintf("%s.%s", base64.RawURLEncoding.EncodeToString(key), fileExtension)
 	thumbnailFilePath := filepath.Join(cfg.assetsRoot, thumbnailFile)
 	newFile, err := os.Create(thumbnailFilePath)
 	if err != nil {
