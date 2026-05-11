@@ -93,14 +93,33 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ratio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "couldn't find the temp file on disk", err)
+		return
+	}
+
+	processedVideoPath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "something went wrong while processing", err)
+		return
+	}
+
+	processedVideo, err := os.Open(processedVideoPath)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "something went wrong while opening processed file", err)
+		return
+	}
+	defer processedVideo.Close()
+
 	randomBytes := make([]byte, 32)
 	rand.Read(randomBytes)
-	key := hex.EncodeToString(randomBytes) + "." + fileExtension
+	key := ratio + "/" + hex.EncodeToString(randomBytes) + "." + fileExtension
 
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: aws.String(cfg.s3Bucket),
 		Key: aws.String(key),
-		Body: tempFile,
+		Body: processedVideo,
 		ContentType: aws.String(mediatype),
 	})
 	if err != nil {

@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os/exec"
+	"bytes"
+	"fmt"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
@@ -117,4 +120,46 @@ func (cfg *apiConfig) handlerVideosRetrieve(w http.ResponseWriter, r *http.Reque
 	}
 
 	respondWithJSON(w, http.StatusOK, videos)
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	type Stream struct {
+		Height int
+		Width int
+	}
+
+	type ffprobeOutput struct {
+ 	   Streams []Stream `json:"streams"`
+	}
+
+	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+	var b bytes.Buffer
+	cmd.Stdout = &b
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("Command finished with error: %v", err)
+	}
+
+	var stream ffprobeOutput
+	if err := json.Unmarshal(b.Bytes(), &stream); err != nil {
+		return "", fmt.Errorf("Error unmarshalling JSON: %v", err)
+	}
+	if stream.Streams[0].Height / stream.Streams[0].Width == 1 {
+		return "portrait", nil
+	} else if stream.Streams[0].Height / stream.Streams[0].Width == 0 {
+		return "landscape", nil
+	}
+	return "other", nil
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	outputFilePath := fmt.Sprintf("%v.processing", filePath)
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputFilePath)
+
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("Command finished with error: %v", err)
+	}
+	
+	return outputFilePath, nil
 }
