@@ -9,11 +9,8 @@ import (
 	"io"
 	"encoding/hex"
 	"fmt"
-	"context"
-	"time"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -130,7 +127,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	url := fmt.Sprintf("%s,%s", cfg.s3Bucket, key)
+	url := fmt.Sprintf("https://%s/%s", cfg.s3CfDistribution, key)
 	video.VideoURL = &url
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
@@ -138,41 +135,5 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	video, err = cfg.dbVideoToSignedVideo(video)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "something went wrong converting to signed video", err)
-		return
-	}
-
 	respondWithJSON(w, http.StatusOK, video)
-}
-
-func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error) {
-	presignClient := s3.NewPresignClient(s3Client)
-	presignedHTTPRequest, err := presignClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: &bucket,
-		Key: &key,
-	},s3.WithPresignExpires(expireTime))
-	if err != nil {
-		return "", fmt.Errorf("Something went wrong: %v", err)
-	}
-	return presignedHTTPRequest.URL, nil
-}
-
-func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	if video.VideoURL == nil {
-		return video, nil
-	}
-	splitedURL := strings.Split(*video.VideoURL, ",")
-	if len(splitedURL) != 2 {
-    	return video, nil
-	}
-	expirationTime, _ := time.ParseDuration("1h")
-	presingedURL, err := generatePresignedURL(cfg.s3Client, splitedURL[0], splitedURL[1], expirationTime)
-	if err != nil {
-		return video, fmt.Errorf("Error while retrieving video URL: %v", err)
-	}
-
-	video.VideoURL = &presingedURL
-	return video, nil
 }
